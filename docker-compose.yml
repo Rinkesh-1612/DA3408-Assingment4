@@ -1,0 +1,55 @@
+# Start the whole stack with one command: docker compose up -d --build
+# You can change the host ports, the bind address and the Grafana password in the .env file (see .env.example).
+# BIND_ADDR=0.0.0.0 (default): other computers can reach the stack, for example on a VPS.
+# BIND_ADDR=127.0.0.1: only this computer can reach the stack.
+services:
+  app:
+    build: .
+    ports:
+      - "${BIND_ADDR:-0.0.0.0}:${APP_PORT:-8501}:8501"            # Streamlit user interface
+      - "${BIND_ADDR:-0.0.0.0}:${APP_METRICS_PORT:-28000}:28000"  # /metrics endpoint (open only for inspection)
+    volumes: ["hf_cache:/cache"]            # Model files (about 1 GB). Docker downloads them one time.
+    restart: unless-stopped
+
+  # Node exporter reads /proc (CPU, memory, load, disk I/O) and the root file system (disk use) of the host.
+  # It does not use host networking, so no firewall setting is necessary.
+  # Prometheus connects to it at node_exporter:9100.
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    pid: host
+    command: ["--path.rootfs=/host"]
+    volumes: ["/:/host:ro"]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports: ["${BIND_ADDR:-0.0.0.0}:${PROMETHEUS_PORT:-9090}:9090"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    depends_on: [alertmanager]
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports: ["${BIND_ADDR:-0.0.0.0}:${ALERTMANAGER_PORT:-9093}:9093"]
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    volumes: ["./configs/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports: ["${BIND_ADDR:-0.0.0.0}:${GRAFANA_PORT:-3000}:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
+    volumes:
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus]
+    restart: unless-stopped
+
+volumes:
+  hf_cache:

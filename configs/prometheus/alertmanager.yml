@@ -1,0 +1,6 @@
+route:
+  receiver: default
+  group_by: [alertname]
+  group_wait: 5s
+receivers:
+  - name: default   # No external notifier. The alerts show at http://localhost:9093 and in Grafana.
