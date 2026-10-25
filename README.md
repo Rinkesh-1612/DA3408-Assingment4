@@ -157,8 +157,8 @@ The application does not need a Python environment. The Docker image has all the
 1. Get the project. Go to its folder:
 
    ```bash
-   git clone <repository-url>
-   cd DA3408-Assignment4
+   git clone https://github.com/Rinkesh-1612/DA3408-Assingment4.git
+   cd DA3408-Assingment4
    ```
 
 2. Start the stack (or run `make up`):
